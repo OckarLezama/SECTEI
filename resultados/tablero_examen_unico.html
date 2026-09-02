@@ -330,9 +330,8 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
     </div>
 
     <div id="vacio">
-      <h2>Sin datos cargados todavía</h2>
-      <p>Abre "Fuentes y bloques" en la barra lateral, conecta las URLs de GitHub o sube los CSV localmente para esta prueba.</p>
-      <button class="btn dark" onclick="abrirConfig()">Abrir fuentes de datos</button>
+      <h2>Cargando datos desde GitHub…</h2>
+      <p>Esto toma unos segundos. Si tarda demasiado, revisa la conexión o abre "Fuentes y bloques" para verificar las URLs.</p>
     </div>
 
     <div id="contenido" style="display:none;">
@@ -541,13 +540,16 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
       </div>
 
       <div class="bloques-editor">
-        <div class="nota" style="margin:0 0 12px;">Estas tablas le dicen al tablero qué preguntas de Moodle (numeradas 1 a 105 corridas) pertenecen a cada materia — es tu tabla oficial de "reactivo inicia / reactivo termina". No necesitas tocarlas si el examen se mantiene como está; solo ajústalas aquí, sin tocar código, si el orden de las preguntas cambia en Moodle.</div>
-        <h4>Parte 1 — rangos de reactivos por bloque</h4>
-        <table class="bloques-tbl" id="tblBloquesP1"></table>
-        <h4>Parte 2 — rangos de reactivos por bloque</h4>
-        <table class="bloques-tbl" id="tblBloquesP2"></table>
-        <div class="nota">El mínimo para acreditar cada bloque es 60% de sus reactivos. Después de editar, presiona "Recalcular".</div>
-        <button class="btn" style="margin-top:10px;" onclick="recalcularTodo()">Recalcular con estos bloques</button>
+        <div class="nota" style="margin:0 0 12px;">Estas tablas le dicen al tablero qué preguntas de Moodle (numeradas 1 a 105 corridas) pertenecen a cada materia. No necesitas tocarlas si el examen se mantiene como está; solo ábrelas y ajústalas aquí, sin tocar código, si el orden de las preguntas cambia en Moodle.</div>
+        <button class="btn" id="btnMostrarBloques" onclick="toggleEditorBloques()">Configurar rangos de bloques</button>
+        <div id="editorBloquesBody" style="display:none;margin-top:14px;">
+          <h4>Parte 1 — rangos de reactivos por bloque</h4>
+          <table class="bloques-tbl" id="tblBloquesP1"></table>
+          <h4>Parte 2 — rangos de reactivos por bloque</h4>
+          <table class="bloques-tbl" id="tblBloquesP2"></table>
+          <div class="nota">El mínimo para acreditar cada bloque es 60% de sus reactivos. Después de editar, presiona "Recalcular".</div>
+          <button class="btn" style="margin-top:10px;" onclick="recalcularTodo()">Recalcular con estos bloques</button>
+        </div>
       </div>
     </div>
   </div>
@@ -586,6 +588,12 @@ function cambiarVista(id){
 }
 function abrirConfig(){ document.getElementById('configOverlay').classList.add('abierto'); }
 function cerrarConfig(){ document.getElementById('configOverlay').classList.remove('abierto'); }
+function toggleEditorBloques(){
+  const body = document.getElementById('editorBloquesBody');
+  const abierto = body.style.display !== 'none';
+  body.style.display = abierto ? 'none' : 'block';
+  document.getElementById('btnMostrarBloques').textContent = abierto ? 'Configurar rangos de bloques' : 'Ocultar configuración de bloques';
+}
 
 function pintarTablaBloques(lista, contenedorId, clave){
   const el = document.getElementById(contenedorId);
@@ -649,15 +657,17 @@ function cargarCSV(url, fileInput, callback, marcadorId){
     error:()=>{ marcador.innerHTML = '<span style="color:var(--rojo)">Error al descargar. Revisa la URL raw de GitHub.</span>'; callback(null); }
   });
 }
+let respuestasCarga = 0;
 function cargarTodo(){
+  respuestasCarga = 0;
   cargarCSV(document.getElementById('urlP1').value, document.getElementById('fileP1'), (d)=>{
-    DATA.p1 = d; document.getElementById('p1').className = 'punto ' + (d?'ok':'falta'); intentarProcesar();
+    DATA.p1 = d; document.getElementById('p1').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
   }, 'mP1');
   cargarCSV(document.getElementById('urlP2').value, document.getElementById('fileP2'), (d)=>{
-    DATA.p2 = d; document.getElementById('p2').className = 'punto ' + (d?'ok':'falta'); intentarProcesar();
+    DATA.p2 = d; document.getElementById('p2').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
   }, 'mP2');
   cargarCSV(document.getElementById('urlSocio').value, document.getElementById('fileSocio'), (d)=>{
-    DATA.socio = d; document.getElementById('p3').className = 'punto ' + (d?'ok':'falta'); intentarProcesar();
+    DATA.socio = d; document.getElementById('p3').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
   }, 'mSocio');
 }
 function intentarProcesar(){
@@ -672,10 +682,17 @@ function intentarProcesar(){
       console.error('Error al procesar los datos:', err);
       document.getElementById('vacio').innerHTML =
         '<h2 style="color:var(--rojo-d)">Ocurrió un error al procesar los archivos</h2>'+
-        '<p>Abre la consola del navegador (F12) para ver el detalle. Mensaje: '+err.message+'</p>';
+        '<p>Abre la consola del navegador (F12) para ver el detalle. Mensaje: '+err.message+'</p>'+
+        '<button class="btn dark" onclick="abrirConfig()">Abrir fuentes de datos</button>';
       document.getElementById('vacio').style.display='block';
       document.getElementById('contenido').style.display='none';
     }
+  } else if(respuestasCarga>=3){
+    document.getElementById('vacio').innerHTML =
+      '<h2 style="color:var(--rojo-d)">No se pudieron cargar los datos desde GitHub</h2>'+
+      '<p>Revisa que los archivos existan en el repositorio con esos nombres, o carga los CSV localmente para esta prueba.</p>'+
+      '<button class="btn dark" onclick="abrirConfig()">Abrir fuentes de datos</button>';
+    document.getElementById('vacio').style.display='block';
   }
 }
 function recalcularTodo(){ if(DATA.p1 && DATA.p2) intentarProcesar(); }
@@ -1240,6 +1257,9 @@ function buscarIndividual(){
     <table class="datos"><tr><th>Bloque</th><th>Parte</th><th>Aciertos</th><th>Estado</th></tr>${filas}</table>
   `;
 }
+
+/* carga automatica al abrir la pagina, usando las URLs de GitHub ya configuradas */
+cargarTodo();
 </script>
 </body>
 </html>
