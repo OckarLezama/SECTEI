@@ -272,7 +272,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
       <div class="sello">
         <div>
           <div class="titulo">SABER-SECTEI</div>
-          <div class="subtitulo">Examen Único 2026</div>
+          <div class="subtitulo">Programa SABER-SECTEI 2026</div>
         </div>
       </div>
       <div class="franja">
@@ -323,7 +323,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
 
     <div class="encabezado">
       <div>
-        <h1>Resultados preliminares · Examen Único</h1>
+        <h1>Resultados preliminares · SABER-SECTEI</h1>
         <div class="desc">Jornada de aplicación 12–13 de septiembre de 2026 · datos sujetos a modificaciones</div>
       </div>
       <div class="badge-actualizacion" id="badgeActualizacion">Sin datos cargados</div>
@@ -372,7 +372,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
         <div class="grid2">
           <div class="card">
             <h3>Promedio general de la aplicación</h3>
-            <div class="card-sub">Calificación en escala de 0 a 10</div>
+            <div class="card-sub">Calificación en escala de 0 a 10, como se acostumbra en México</div>
             <div class="promedio-grande" id="promedioGeneral">—</div>
             <div class="promedio-detalle" id="promedioDetalle"></div>
           </div>
@@ -389,7 +389,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
         <div class="grid2">
           <div class="card">
             <h3>Asistencia por turno</h3>
-            <div class="card-sub">Registrados vs. quienes terminaron la Parte 1</div>
+            <div class="card-sub">Registrados vs. quienes terminaron cada parte</div>
             <div style="position:relative;height:250px;"><canvas id="chartAsistenciaTurno"></canvas></div>
           </div>
           <div class="card">
@@ -461,6 +461,18 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
               <div style="position:relative;height:180px;margin-bottom:16px;"><canvas id="chartGenero"></canvas></div>
               <div class="mini-titulo">Grupo de edad</div>
               <div style="position:relative;flex:1;min-height:200px;"><canvas id="chartEdad"></canvas></div>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="card">
+              <h3>Acreditación por sexo</h3>
+              <div class="card-sub">Cuántos hombres y mujeres acreditan ≥3 bloques, sobre el total de cada grupo</div>
+              <div style="position:relative;height:200px;"><canvas id="chartAcreditaSexo"></canvas></div>
+            </div>
+            <div class="card">
+              <h3>Acreditación por grupo de edad</h3>
+              <div class="card-sub">Cuántos acreditan ≥3 bloques en cada rango de edad</div>
+              <div style="position:relative;height:200px;"><canvas id="chartAcreditaEdad"></canvas></div>
             </div>
           </div>
           <div class="card">
@@ -924,15 +936,16 @@ function renderAsistencia(){
   const turnos = ["Matutino","Único","Vespertino"];
   const asistPorTurno = turnos.map(t=>{
     const enTurno = personas.filter(p=>p.socio && p.socio.turno_simulado===t);
-    return {turno:t, total:enTurno.length, term:enTurno.filter(p=>p.estado1==='Terminado').length};
+    return {turno:t, total:enTurno.length, term1:enTurno.filter(p=>p.estado1==='Terminado').length, term2:enTurno.filter(p=>p.estado2==='Terminado').length};
   });
   destruirChart('asisTurno');
   charts.asisTurno = new Chart(document.getElementById('chartAsistenciaTurno'), {
     type:'bar',
     data:{ labels:asistPorTurno.map(a=>a.turno),
       datasets:[
-        {label:'Registrados', data:asistPorTurno.map(a=>a.total), backgroundColor:'#E4E0CE', borderRadius:5, maxBarThickness:42},
-        {label:'Terminaron Parte 1', data:asistPorTurno.map(a=>a.term), backgroundColor:'#778E88', borderRadius:5, maxBarThickness:42}
+        {label:'Registrados', data:asistPorTurno.map(a=>a.total), backgroundColor:'#E4E0CE', borderRadius:5, maxBarThickness:34},
+        {label:'Terminaron Parte 1', data:asistPorTurno.map(a=>a.term1), backgroundColor:'#778E88', borderRadius:5, maxBarThickness:34},
+        {label:'Terminaron Parte 2', data:asistPorTurno.map(a=>a.term2), backgroundColor:'#B66666', borderRadius:5, maxBarThickness:34}
       ]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}}, scales:{x:{grid:{color:'#efe9d8'}}, y:{grid:{color:'#efe9d8'}}} }
   });
@@ -1154,6 +1167,33 @@ function renderSocio(){
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}}, y:{grid:{color:'#efe9d8'}}} }
   });
 
+  /* acreditacion desagregada por sexo */
+  const gruposSexo = Object.keys(generos);
+  destruirChart('acreditaSexo');
+  charts.acreditaSexo = new Chart(document.getElementById('chartAcreditaSexo'), {
+    type:'bar',
+    data:{ labels:gruposSexo,
+      datasets:[
+        {label:'Acredita ≥3 bloques', data:gruposSexo.map(g=>personas.filter(p=>(p.socio.genero||'Sin dato')===g && p.acreditados>=3).length), backgroundColor:'#778E88', borderRadius:5, maxBarThickness:36},
+        {label:'No acredita', data:gruposSexo.map(g=>personas.filter(p=>(p.socio.genero||'Sin dato')===g && p.acreditados<3).length), backgroundColor:'#B66666', borderRadius:5, maxBarThickness:36}
+      ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},
+      scales:{ x:{stacked:true, grid:{display:false}}, y:{stacked:true, grid:{color:'#efe9d8'}} } }
+  });
+
+  /* acreditacion desagregada por grupo de edad */
+  destruirChart('acreditaEdad');
+  charts.acreditaEdad = new Chart(document.getElementById('chartAcreditaEdad'), {
+    type:'bar',
+    data:{ labels:edadesOrdenadas,
+      datasets:[
+        {label:'Acredita ≥3 bloques', data:edadesOrdenadas.map(e=>personas.filter(p=>(p.socio.rango_edad||'Sin dato')===e && p.acreditados>=3).length), backgroundColor:'#778E88', borderRadius:5, maxBarThickness:30},
+        {label:'No acredita', data:edadesOrdenadas.map(e=>personas.filter(p=>(p.socio.rango_edad||'Sin dato')===e && p.acreditados<3).length), backgroundColor:'#B66666', borderRadius:5, maxBarThickness:30}
+      ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},
+      scales:{ x:{stacked:true, grid:{display:false}}, y:{stacked:true, grid:{color:'#efe9d8'}} } }
+  });
+
   /* otros datos demograficos disponibles en el CSV sociodemografico */
   const campoSi = (campo)=> Math.round(100*personas.filter(p=>(p.socio[campo]||'').toLowerCase()==='sí' || (p.socio[campo]||'').toLowerCase()==='si').length/personas.length);
   const demo = [
@@ -1179,7 +1219,7 @@ function renderSocio(){
   let cuerpoA = datosAlcaldia.map(d=>{
     const grupo = personas.filter(p=>p.socio.alcaldia===d.alcaldia);
     const porBloque = contarPorBloque(grupo).map(n=>`<td>${n}</td>`).join('');
-    return `<tr><td>${d.alcaldia}</td><td>${d.n}</td><td>${d.term}</td><td>${d.acred}</td><td>${d.pct}% (${d.acred} de ${d.n})</td><td>${d.promGrupo10!==null? d.promGrupo10.toFixed(1) : '—'}</td><td>${d.promAcred10!==null? d.promAcred10.toFixed(1) : '—'}</td>${porBloque}</tr>`;
+    return `<tr><td>${d.alcaldia}</td><td>${d.n}</td><td>${d.term}</td><td>${d.acred}</td><td title="${d.acred} de ${d.n}">${d.pct}%</td><td>${d.promGrupo10!==null? d.promGrupo10.toFixed(1) : '—'}</td><td>${d.promAcred10!==null? d.promAcred10.toFixed(1) : '—'}</td>${porBloque}</tr>`;
   }).join('');
   document.getElementById('tablaAlcaldia').innerHTML = headA + cuerpoA;
 
@@ -1189,7 +1229,7 @@ function renderSocio(){
     const grupo = personas.filter(p=>p.socio.sede_asignada_simulada===s);
     const acred = grupo.filter(p=>p.acreditados>=3).length;
     const porBloque = contarPorBloque(grupo).map(n=>`<td>${n}</td>`).join('');
-    return `<tr><td>${s}</td><td>${grupo.length}</td><td>${acred}</td><td>${Math.round(100*acred/grupo.length)}% (${acred} de ${grupo.length})</td>${porBloque}</tr>`;
+    return `<tr><td>${s}</td><td>${grupo.length}</td><td>${acred}</td><td title="${acred} de ${grupo.length}">${Math.round(100*acred/grupo.length)}%</td>${porBloque}</tr>`;
   }).join('');
   document.getElementById('tablaSede').innerHTML = sedes.length ? (headS + cuerpoS) : '<tr><td>Sin datos de sede para este filtro.</td></tr>';
 }
