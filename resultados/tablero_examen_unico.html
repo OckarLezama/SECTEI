@@ -372,7 +372,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
         <div class="grid2">
           <div class="card">
             <h3>Promedio general de la aplicación</h3>
-            <div class="card-sub">Calificación en escala de 0 a 10</div>
+            <div class="card-sub">Calificación en escala de 0 a 10, como se acostumbra en México</div>
             <div class="promedio-grande" id="promedioGeneral">—</div>
             <div class="promedio-detalle" id="promedioDetalle"></div>
           </div>
@@ -648,7 +648,22 @@ function rangoTiempo(mins){
   if(mins <= 120) return "Entre 1 y 2 horas";
   return "Más de 2 horas";
 }
-function normalizarEstado(txt){ return txt ? txt.trim() : "No se ha intentado todavía"; }
+function normalizarEstado(txt){
+  const t = (txt||'').trim().toLowerCase();
+  if(t==='terminado' || t==='finalizado') return 'Terminado';
+  if(t==='en progreso' || t==='en curso' || t==='abierto') return 'En curso';
+  if(!t) return 'No se ha intentado todavía';
+  return txt.trim(); // valor no reconocido: se conserva tal cual para no ocultarlo
+}
+/* lee un campo probando varios nombres de columna posibles (Moodle cambia el texto exacto entre exportaciones) */
+function campo(fila, nombres){
+  for(const n of nombres){ if(fila[n]!==undefined && fila[n]!=='') return fila[n]; }
+  return undefined;
+}
+function numeroDecimal(v){
+  if(v===undefined || v===null || v==='') return NaN;
+  return parseFloat(String(v).replace(',','.'));
+}
 
 /* ============================================================
    CARGA DE DATOS
@@ -713,41 +728,50 @@ function recalcularTodo(){ if(DATA.p1 && DATA.p2) intentarProcesar(); }
    PROCESAMIENTO
    ============================================================ */
 function filaEsPromedio(fila){ return (fila['Apellido(s)']||'').toLowerCase().includes('promedio'); }
-function preguntaCols(fila){ return Object.keys(fila).filter(k=>k.startsWith('Q.')); }
-function calcBloquesPersona(fila, listaBloques, colsPreguntas){
+/* mapa numero-de-reactivo -> nombre real de columna; acepta "Q. 1 /1.00" o "P. 1 /1,00" (Moodle cambia el prefijo y el separador decimal) */
+function mapaPreguntas(fila){
+  const mapa = {};
+  Object.keys(fila).forEach(k=>{
+    const m = k.trim().match(/^[PQ]\.\s*(\d+)\s*\//i);
+    if(m) mapa[parseInt(m[1])] = k;
+  });
+  return mapa;
+}
+function calcBloquesPersona(fila, listaBloques, mapaPreg){
   return listaBloques.map(b=>{
     let correctas=0, total=0;
     for(let n=b.inicio; n<=b.fin; n++){
-      const col = colsPreguntas.find(c=>c.trim()===`Q. ${n} /1.00`);
+      const col = mapaPreg[n];
       if(!col) continue;
       total++;
-      const v = fila[col];
-      if(v && v!=='-' && parseFloat(v)>=1) correctas++;
+      const v = numeroDecimal(fila[col]);
+      if(!isNaN(v) && v>=1) correctas++;
     }
     const minimo = Math.ceil(total*0.6);
     return {nombre:b.nombre, correctas, total, minimo, acredita: correctas>=minimo};
   });
 }
 function procesarDatos(){
-  const p1 = DATA.p1.filter(f=>!filaEsPromedio(f) && f['Usuario']);
-  const p2 = DATA.p2.filter(f=>!filaEsPromedio(f) && f['Usuario']);
+  const usuarioDe = (f)=> campo(f, ['Usuario','Nombre de usuario']);
+  const p1 = DATA.p1.filter(f=>!filaEsPromedio(f) && usuarioDe(f));
+  const p2 = DATA.p2.filter(f=>!filaEsPromedio(f) && usuarioDe(f));
   const socioMap = {};
-  if(DATA.socio) DATA.socio.forEach(s=>{ if(s.folio) socioMap[s.folio.trim()] = s; });
+  if(DATA.socio) DATA.socio.forEach(s=>{ if(s.folio) socioMap[s.folio.trim().toLowerCase()] = s; });
 
-  const colsP1 = p1.length ? preguntaCols(p1[0]) : [];
-  const colsP2 = p2.length ? preguntaCols(p2[0]) : [];
-  const p2ByUser = {}; p2.forEach(f=>p2ByUser[f['Usuario']]=f);
+  const mapaP1 = p1.length ? mapaPreguntas(p1[0]) : {};
+  const mapaP2 = p2.length ? mapaPreguntas(p2[0]) : {};
+  const p2ByUser = {}; p2.forEach(f=>p2ByUser[usuarioDe(f)]=f);
 
   const personas = p1.map(f1=>{
-    const usuario = f1['Usuario'];
+    const usuario = usuarioDe(f1);
     const f2 = p2ByUser[usuario] || {};
     const estado1 = normalizarEstado(f1['Estado']);
     const estado2 = normalizarEstado(f2['Estado']);
     const dur1 = parseDuracionMinutos(f1['Duración']);
     const dur2 = parseDuracionMinutos(f2['Duración']);
-    const fin1 = parseFechaMoodle(f1['Finalizado']);
-    const bloques1 = colsP1.length ? calcBloquesPersona(f1, BLOQUES.parte1, colsP1) : [];
-    const bloques2 = colsP2.length ? calcBloquesPersona(f2, BLOQUES.parte2, colsP2) : [];
+    const fin1 = parseFechaMoodle(campo(f1, ['Finalizado']));
+    const bloques1 = Object.keys(mapaP1).length ? calcBloquesPersona(f1, BLOQUES.parte1, mapaP1) : [];
+    const bloques2 = Object.keys(mapaP2).length ? calcBloquesPersona(f2, BLOQUES.parte2, mapaP2) : [];
     const todosBloques = [...bloques1, ...bloques2];
     const acreditados = todosBloques.filter(b=>b.acredita).length;
     const puntajeTotal = todosBloques.reduce((s,b)=>s+b.correctas, 0);
@@ -758,11 +782,11 @@ function procesarDatos(){
       rango1:rangoTiempo(dur1), rango2:rangoTiempo(dur2),
       bloques1, bloques2, acreditados, totalBloques: todosBloques.length,
       puntajeTotal, puntajeMax,
-      socio: socioMap[usuario] || null
+      socio: socioMap[usuario.toLowerCase()] || null
     };
   });
 
-  RESULTADOS = { personas, colsP1, colsP2 };
+  RESULTADOS = { personas, colsP1:Object.keys(mapaP1), colsP2:Object.keys(mapaP2) };
   renderResumen();
   renderAsistencia();
   renderBloques();
@@ -870,10 +894,13 @@ function renderResumen(){
   const maxPorPersona = conPuntaje.length ? conPuntaje[0].puntajeMax : 0;
   const promedioGlobal10 = conPuntaje.length ? (conPuntaje.reduce((s,p)=>s+ (p.puntajeTotal/p.puntajeMax)*10, 0)/conPuntaje.length) : 0;
   const aprobados = personas.filter(p=>p.acreditados>=3 && p.puntajeMax>0);
-  const promedioAprob10 = aprobados.length ? (aprobados.reduce((s,p)=>s+ (p.puntajeTotal/p.puntajeMax)*10, 0)/aprobados.length) : 0;
+  const promedioAprob10 = aprobados.length ? (aprobados.reduce((s,p)=>s+ (p.puntajeTotal/p.puntajeMax)*10, 0)/aprobados.length) : null;
+  const completos = personas.filter(p=>p.totalBloques>0 && p.acreditados===p.totalBloques && p.puntajeMax>0);
+  const promedioCompletos10 = completos.length ? (completos.reduce((s,p)=>s+ (p.puntajeTotal/p.puntajeMax)*10, 0)/completos.length) : null;
   document.getElementById('promedioGeneral').innerHTML = maxPorPersona ? `${promedioGlobal10.toFixed(1)}<span>/10</span>` : '—';
   document.getElementById('promedioDetalle').innerHTML = `
-    Promedio de quienes acreditan ≥3 bloques: <strong>${promedioAprob10.toFixed(1)}/10</strong><br>
+    Promedio de quienes acreditan ≥3 bloques: <strong>${promedioAprob10!==null? promedioAprob10.toFixed(1)+'/10' : '—'}</strong><br>
+    Promedio de quienes acreditan los 7 bloques (su calificación ya es definitiva, no repiten ningún bloque): <strong>${promedioCompletos10!==null? promedioCompletos10.toFixed(1)+'/10' : '—'}</strong> (${completos.length} aspirantes)<br>
     Calculado sobre ${conPuntaje.length} aspirantes con calificación registrada (equivale a ${(promedioGlobal10*maxPorPersona/10).toFixed(0)} de ${maxPorPersona} reactivos correctos en promedio)
   `;
 
@@ -1053,9 +1080,9 @@ function poblarFiltrosAlcaldia(){
   const sel = document.getElementById('filtroAlcaldia');
   const selT = document.getElementById('filtroTurno');
   const selS = document.getElementById('filtroSede');
-  const alcaldias = [...new Set(DATA.socio.map(s=>s.alcaldia).filter(Boolean))].sort();
-  const turnos = [...new Set(DATA.socio.map(s=>s.turno_simulado).filter(Boolean))].sort();
-  const sedes = [...new Set(DATA.socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort();
+  const alcaldias = [...new Set(DATA.socio.map(s=>s.alcaldia).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const turnos = [...new Set(DATA.socio.map(s=>s.turno_simulado).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const sedes = [...new Set(DATA.socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   sel.innerHTML = '<option value="">Todas las alcaldías</option>' + alcaldias.map(a=>`<option>${a}</option>`).join('');
   selT.innerHTML = '<option value="">Todos los turnos</option>' + turnos.map(t=>`<option>${t}</option>`).join('');
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
@@ -1065,7 +1092,7 @@ function actualizarSedesPorAlcaldia(){
   const alcaldia = document.getElementById('filtroAlcaldia').value;
   const selS = document.getElementById('filtroSede');
   const actual = selS.value;
-  const sedes = [...new Set(DATA.socio.filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort();
+  const sedes = [...new Set(DATA.socio.filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
   selS.value = sedes.includes(actual) ? actual : '';
 }
@@ -1114,7 +1141,7 @@ function renderSocio(){
   sinDatosEl.style.display='none';
   conDatosEl.style.display='block';
 
-  const alcaldias = [...new Set(personas.map(p=>p.socio.alcaldia))].sort();
+  const alcaldias = [...new Set(personas.map(p=>p.socio.alcaldia))].sort((a,b)=>a.localeCompare(b,'es'));
   const datosAlcaldia = alcaldias.map(a=>{
     const grupo = personas.filter(p=>p.socio.alcaldia===a);
     const acredGrupo = grupo.filter(p=>p.acreditados>=3);
@@ -1215,7 +1242,7 @@ function renderSocio(){
   }
   const colsBloques = nombresBloques.map(n=>`<th>${n}</th>`).join('');
 
-  let headA = `<tr><th>Alcaldía</th><th>Aspirantes</th><th>Terminaron Parte 1</th><th>Acreditan ≥3 bloques</th><th>% que acredita ≥3</th><th>Calif. promedio (todos, /10)</th><th>Calif. promedio (solo quienes acreditan, /10)</th>${colsBloques}</tr>`;
+  let headA = `<tr><th>Alcaldía</th><th>Aspirantes</th><th>Terminaron Parte 1</th><th>Acreditan ≥3 bloques</th><th>% que acredita ≥3</th><th>Calif. promedio (todos, /10)</th><th>Calif. promedio (solo quienes acreditan ≥ 3, /10)</th>${colsBloques}</tr>`;
   let cuerpoA = datosAlcaldia.map(d=>{
     const grupo = personas.filter(p=>p.socio.alcaldia===d.alcaldia);
     const porBloque = contarPorBloque(grupo).map(n=>`<td>${n}</td>`).join('');
@@ -1223,7 +1250,7 @@ function renderSocio(){
   }).join('');
   document.getElementById('tablaAlcaldia').innerHTML = headA + cuerpoA;
 
-  const sedes = [...new Set(personas.map(p=>p.socio.sede_asignada_simulada).filter(Boolean))].sort();
+  const sedes = [...new Set(personas.map(p=>p.socio.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   let headS = `<tr><th>Sede</th><th>Aspirantes</th><th>Acreditan ≥3 bloques</th><th>% que acredita ≥3</th>${colsBloques}</tr>`;
   let cuerpoS = sedes.map(s=>{
     const grupo = personas.filter(p=>p.socio.sede_asignada_simulada===s);
@@ -1241,8 +1268,8 @@ function poblarFiltrosIndividual(){
   if(!DATA.socio) return;
   const selA = document.getElementById('filtroAlcaldiaInd');
   const selS = document.getElementById('filtroSedeInd');
-  const alcaldias = [...new Set(DATA.socio.map(s=>s.alcaldia).filter(Boolean))].sort();
-  const sedes = [...new Set(DATA.socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort();
+  const alcaldias = [...new Set(DATA.socio.map(s=>s.alcaldia).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const sedes = [...new Set(DATA.socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   selA.innerHTML = '<option value="">Todas las alcaldías</option>' + alcaldias.map(a=>`<option>${a}</option>`).join('');
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
 }
@@ -1251,7 +1278,7 @@ function actualizarSedesPorAlcaldiaInd(){
   const alcaldia = document.getElementById('filtroAlcaldiaInd').value;
   const selS = document.getElementById('filtroSedeInd');
   const actual = selS.value;
-  const sedes = [...new Set(DATA.socio.filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort();
+  const sedes = [...new Set(DATA.socio.filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
   selS.value = sedes.includes(actual) ? actual : '';
 }
