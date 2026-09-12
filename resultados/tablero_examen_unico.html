@@ -753,8 +753,22 @@ function calcBloquesPersona(fila, listaBloques, mapaPreg){
 }
 function procesarDatos(){
   const usuarioDe = (f)=> campo(f, ['Usuario','Nombre de usuario']);
-  const p1 = DATA.p1.filter(f=>!filaEsPromedio(f) && usuarioDe(f));
-  const p2 = DATA.p2.filter(f=>!filaEsPromedio(f) && usuarioDe(f));
+  /* si un folio aparece más de una vez en el mismo archivo (Moodle permitió más de un intento),
+     nos quedamos solo con el de mejor calificación, para no duplicar personas en los conteos */
+  function deduplicarPorUsuario(filas){
+    const mejorPorUsuario = {};
+    filas.forEach(f=>{
+      const u = usuarioDe(f);
+      const calif = numeroDecimal(campo(f, ['Calificación/105,00','Calificación/105.00']));
+      const actual = mejorPorUsuario[u];
+      if(!actual || (!isNaN(calif) && calif > (actual._calif ?? -1))){
+        mejorPorUsuario[u] = {...f, _calif: isNaN(calif) ? -1 : calif};
+      }
+    });
+    return Object.values(mejorPorUsuario);
+  }
+  const p1 = deduplicarPorUsuario(DATA.p1.filter(f=>!filaEsPromedio(f) && usuarioDe(f)));
+  const p2 = deduplicarPorUsuario(DATA.p2.filter(f=>!filaEsPromedio(f) && usuarioDe(f)));
   const socioMap = {};
   if(DATA.socio) DATA.socio.forEach(s=>{ if(s.folio) socioMap[s.folio.trim().toLowerCase()] = s; });
 
