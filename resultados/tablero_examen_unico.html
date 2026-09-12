@@ -581,9 +581,9 @@ let BLOQUES = {
   ],
   parte2: [
     {nombre:"Pensamiento Matemático", inicio:1, fin:35},
+    {nombre:"Pensamiento Filosófico y Humanidades", inicio:76, fin:105},
     {nombre:"Ciencias Naturales, Exp. y Tecnología", inicio:36, fin:63},
     {nombre:"Cultura Digital", inicio:64, fin:75},
-    {nombre:"Pensamiento Filosófico y Humanidades", inicio:76, fin:105},
   ]
 };
 let DATA = { p1:null, p2:null, socio:null };
@@ -776,13 +776,17 @@ function procesarDatos(){
     const acreditados = todosBloques.filter(b=>b.acredita).length;
     const puntajeTotal = todosBloques.reduce((s,b)=>s+b.correctas, 0);
     const puntajeMax = todosBloques.reduce((s,b)=>s+b.total, 0);
+    /* si el propio archivo de calificaciones ya trae una columna "Turno" (se agrega al fusionar los CSV por turno), tiene prioridad sobre el cruce con el sociodemográfico */
+    const turnoReal = campo(f1, ['Turno']);
+    const socioBase = socioMap[usuario.toLowerCase()] || null;
+    const socio = turnoReal ? {...(socioBase||{}), turno_simulado: turnoReal} : socioBase;
     return {
       usuario, nombre:`${f1['Nombre']||''} ${f1['Apellido(s)']||''}`.trim(),
       estado1, estado2, dur1, dur2, fin1,
       rango1:rangoTiempo(dur1), rango2:rangoTiempo(dur2),
       bloques1, bloques2, acreditados, totalBloques: todosBloques.length,
       puntajeTotal, puntajeMax,
-      socio: socioMap[usuario.toLowerCase()] || null
+      socio
     };
   });
 
@@ -1112,7 +1116,7 @@ function renderSocio(){
   const fA = document.getElementById('filtroAlcaldia')?.value || '';
   const fT = document.getElementById('filtroTurno')?.value || '';
   const fS = document.getElementById('filtroSede')?.value || '';
-  const todasConSocio = RESULTADOS.personas.filter(p=>p.socio);
+  const todasConSocio = RESULTADOS.personas.filter(p=>p.socio && p.socio.alcaldia);
   let personas = todasConSocio;
   if(fA) personas = personas.filter(p=>p.socio.alcaldia===fA);
   if(fT) personas = personas.filter(p=>p.socio.turno_simulado===fT);
