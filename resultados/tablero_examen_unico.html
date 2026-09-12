@@ -679,8 +679,10 @@ function cargarCSV(url, fileInput, callback, marcadorId){
     return;
   }
   if(!url){ marcador.textContent = "Sin URL ni archivo."; callback(null); return; }
-  Papa.parse(url, {header:true, download:true, skipEmptyLines:true,
-    complete:(res)=>{ marcador.textContent = `Cargado desde GitHub (${res.data.length} filas).`; callback(res.data); },
+  /* se agrega un parámetro con la hora exacta para evitar que GitHub o el navegador entreguen una copia vieja en caché */
+  const urlSinCache = url + (url.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
+  Papa.parse(urlSinCache, {header:true, download:true, skipEmptyLines:true,
+    complete:(res)=>{ marcador.textContent = `Cargado desde GitHub (${res.data.length} filas) · ${new Date().toLocaleTimeString('es-MX')}`; callback(res.data); },
     error:()=>{ marcador.innerHTML = '<span style="color:var(--rojo)">Error al descargar. Revisa la URL raw de GitHub.</span>'; callback(null); }
   });
 }
