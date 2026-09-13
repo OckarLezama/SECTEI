@@ -239,7 +239,8 @@ table.datos td a:hover{text-decoration:underline;}
 .badge.si{background:var(--verde-bg);color:var(--verde-d);}
 .badge.no{background:var(--rojo-bg);color:var(--rojo-d);}
 
-.filtros{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+.filtros{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+.filtros-fila{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
 .filtros select{padding:8px 12px;border:1px solid var(--linea);border-radius:8px;font-family:inherit;font-size:12.5px;background:var(--panel);color:var(--tinta);}
 
 .demo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
@@ -436,9 +437,11 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
 
       <div class="view" id="view-socio">
         <div class="filtros">
-          <select id="filtroAlcaldia" onchange="actualizarSedesPorAlcaldia(); renderSocio();"><option value="">Todas las alcaldías</option></select>
-          <select id="filtroTurno" onchange="renderSocio()"><option value="">Todos los turnos</option></select>
-          <select id="filtroSede" onchange="renderSocio()"><option value="">Todas las sedes</option></select>
+          <div class="filtros-fila">
+            <select id="filtroAlcaldia" onchange="actualizarSedesPorAlcaldia(); renderSocio();"><option value="">Todas las alcaldías</option></select>
+            <select id="filtroTurno" onchange="renderSocio()"><option value="">Todos los turnos</option></select>
+            <select id="filtroSede" onchange="renderSocio()"><option value="">Todas las sedes</option></select>
+          </div>
           <span id="filtroConteo" class="filtro-conteo"></span>
         </div>
         <div id="socioSinDatos" class="card" style="display:none;text-align:center;color:var(--tinta-suave);">
@@ -500,8 +503,10 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
           <h3>Lista de aspirantes</h3>
           <div class="card-sub">Filtra por alcaldía y sede — toca un folio para ver su desglose completo abajo</div>
           <div class="filtros">
-            <select id="filtroAlcaldiaInd" onchange="actualizarSedesPorAlcaldiaInd(); renderListaIndividual();"><option value="">Todas las alcaldías</option></select>
-            <select id="filtroSedeInd" onchange="renderListaIndividual()"><option value="">Todas las sedes</option></select>
+            <div class="filtros-fila">
+              <select id="filtroAlcaldiaInd" onchange="actualizarSedesPorAlcaldiaInd(); renderListaIndividual();"><option value="">Todas las alcaldías</option></select>
+              <select id="filtroSedeInd" onchange="renderListaIndividual()"><option value="">Todas las sedes</option></select>
+            </div>
             <span id="filtroConteoInd" class="filtro-conteo"></span>
           </div>
           <div class="tabla-scroll"><table class="datos" id="tablaListaIndividual"></table></div>
@@ -569,7 +574,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
   </div>
 </div>
 
-<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-13 17:15 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
+<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-13 18:07 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
 
 <script>
 /* ============================================================
@@ -599,6 +604,15 @@ function cambiarVista(id){
   document.querySelectorAll('.nav-item').forEach(t=>t.classList.toggle('activo', t.dataset.view===id));
   document.querySelectorAll('.view').forEach(p=>p.classList.toggle('activo', p.id==='view-'+id));
   document.getElementById('sidebar').classList.remove('abierta');
+  /* las gráficas que se crean mientras su pestaña está oculta miden mal el espacio disponible
+     (limitación conocida de Chart.js) — al abrir la pestaña, se vuelven a dibujar ya visibles */
+  if(RESULTADOS){
+    if(id==='resumen') renderResumen();
+    else if(id==='asistencia') renderAsistencia();
+    else if(id==='bloques') renderBloques();
+    else if(id==='socio') renderSocio();
+    else if(id==='individual') renderListaIndividual();
+  }
 }
 function abrirConfig(){ document.getElementById('configOverlay').classList.add('abierto'); }
 function cerrarConfig(){ document.getElementById('configOverlay').classList.remove('abierto'); }
@@ -676,28 +690,36 @@ function cargarCSV(url, fileInput, callback, marcadorId){
   if(archivo){
     Papa.parse(archivo, {header:true, skipEmptyLines:true, complete:(res)=>{
       marcador.innerHTML = `Cargado desde archivo local (${res.data.length} filas). <span style="color:var(--rojo)">No visible para otros usuarios.</span>`;
-      callback(res.data);
+      callback(res.data, res.meta.fields);
     }});
     return;
   }
-  if(!url){ marcador.textContent = "Sin URL ni archivo."; callback(null); return; }
+  if(!url){ marcador.textContent = "Sin URL ni archivo."; callback(null, null); return; }
   /* se agrega un parámetro con la hora exacta para evitar que GitHub o el navegador entreguen una copia vieja en caché */
   const urlSinCache = url + (url.includes('?') ? '&' : '?') + 'nocache=' + Date.now();
-  Papa.parse(urlSinCache, {header:true, download:true, skipEmptyLines:true,
-    complete:(res)=>{ marcador.textContent = `Cargado desde GitHub (${res.data.length} filas) · ${new Date().toLocaleTimeString('es-MX')}`; callback(res.data); },
-    error:()=>{ marcador.innerHTML = '<span style="color:var(--rojo)">Error al descargar. Revisa la URL raw de GitHub.</span>'; callback(null); }
-  });
+  /* se descarga el archivo completo primero con fetch() y LUEGO se analiza como texto ya completo.
+     El modo download:true de PapaParse lee el archivo por partes (streaming) y, con archivos grandes,
+     puede cortar una fila quedando a la mitad justo entre dos pedazos, corrompiendo el encabezado.
+     Bajarlo completo primero evita ese problema por completo. */
+  fetch(urlSinCache)
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(texto=>{
+      const res = Papa.parse(texto, {header:true, skipEmptyLines:true});
+      marcador.textContent = `Cargado desde GitHub (${res.data.length} filas) · ${new Date().toLocaleTimeString('es-MX')}`;
+      callback(res.data, res.meta.fields);
+    })
+    .catch(()=>{ marcador.innerHTML = '<span style="color:var(--rojo)">Error al descargar. Revisa la URL raw de GitHub.</span>'; callback(null, null); });
 }
 let respuestasCarga = 0;
 function cargarTodo(){
   respuestasCarga = 0;
-  cargarCSV(document.getElementById('urlP1').value, document.getElementById('fileP1'), (d)=>{
-    DATA.p1 = d; document.getElementById('p1').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
+  cargarCSV(document.getElementById('urlP1').value, document.getElementById('fileP1'), (d, fields)=>{
+    DATA.p1 = d; DATA.p1Fields = fields; document.getElementById('p1').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
   }, 'mP1');
-  cargarCSV(document.getElementById('urlP2').value, document.getElementById('fileP2'), (d)=>{
-    DATA.p2 = d; document.getElementById('p2').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
+  cargarCSV(document.getElementById('urlP2').value, document.getElementById('fileP2'), (d, fields)=>{
+    DATA.p2 = d; DATA.p2Fields = fields; document.getElementById('p2').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
   }, 'mP2');
-  cargarCSV(document.getElementById('urlSocio').value, document.getElementById('fileSocio'), (d)=>{
+  cargarCSV(document.getElementById('urlSocio').value, document.getElementById('fileSocio'), (d, fields)=>{
     DATA.socio = d; document.getElementById('p3').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
   }, 'mSocio');
 }
@@ -732,10 +754,30 @@ function recalcularTodo(){ if(DATA.p1 && DATA.p2) intentarProcesar(); }
    PROCESAMIENTO
    ============================================================ */
 function filaEsPromedio(fila){ return (fila['Apellido(s)']||'').toLowerCase().includes('promedio'); }
-/* mapa numero-de-reactivo -> nombre real de columna; acepta "Q. 1 /1.00" o "P. 1 /1,00" (Moodle cambia el prefijo y el separador decimal) */
-function mapaPreguntas(fila){
+/* normaliza nombres de columna del sociodemográfico: acepta variantes con/sin acento y nombres reales vs. los de la prueba.
+   Es global (no solo dentro de procesarDatos) para que los menús de filtro usen exactamente los mismos nombres que el resto del tablero. */
+function normalizarSocio(s){
+  return {
+    folio: campo(s, ['folio','Folio']),
+    genero: campo(s, ['genero','género','Genero','Género']),
+    rango_edad: campo(s, ['rango_edad','edad_rango','Rango de edad']),
+    alcaldia: campo(s, ['alcaldia','alcaldía','Alcaldia','Alcaldía']),
+    turno_simulado: campo(s, ['turno_simulado','turno','Turno']),
+    sede_asignada_simulada: campo(s, ['sede_asignada_simulada','sede_asignada','sede','Sede']),
+    discapacidad: campo(s, ['discapacidad','Discapacidad']),
+    lengua_indigena: campo(s, ['lengua_indigena','lengua_indígena']),
+    comunidad_indigena: campo(s, ['comunidad_indigena','comunidad_indígena']),
+    acceso_internet: campo(s, ['acceso_internet','internet','Internet']),
+    tiene_beca: campo(s, ['tiene_beca','tiene_beca_pilares']),
+    estatus_registro: campo(s, ['estatus_registro','estatus','Estatus'])
+  };
+}
+function socioNormalizado(){ return (DATA.socio||[]).map(normalizarSocio); }
+/* mapa numero-de-reactivo -> nombre real de columna; se construye a partir del encabezado real del CSV
+   (nunca de una fila de datos: si una sola persona tuviera una fila irregular, no debe romper el mapeo de todos) */
+function mapaPreguntas(camposEncabezado){
   const mapa = {};
-  Object.keys(fila).forEach(k=>{
+  (camposEncabezado||[]).forEach(k=>{
     const m = k.trim().match(/^[PQ]\.\s*(\d+)\s*\//i);
     if(m) mapa[parseInt(m[1])] = k;
   });
@@ -774,27 +816,10 @@ function procesarDatos(){
   const p1 = deduplicarPorUsuario(DATA.p1.filter(f=>!filaEsPromedio(f) && usuarioDe(f)));
   const p2 = deduplicarPorUsuario(DATA.p2.filter(f=>!filaEsPromedio(f) && usuarioDe(f)));
   const socioMap = {};
-  /* normaliza nombres de columna del sociodemográfico: acepta variantes con/sin acento y nombres reales vs. los de la prueba */
-  function normalizarSocio(s){
-    return {
-      folio: campo(s, ['folio','Folio']),
-      genero: campo(s, ['genero','género','Genero','Género']),
-      rango_edad: campo(s, ['rango_edad','edad_rango','Rango de edad']),
-      alcaldia: campo(s, ['alcaldia','alcaldía','Alcaldia','Alcaldía']),
-      turno_simulado: campo(s, ['turno_simulado','turno','Turno']),
-      sede_asignada_simulada: campo(s, ['sede_asignada_simulada','sede_asignada','sede','Sede']),
-      discapacidad: campo(s, ['discapacidad','Discapacidad']),
-      lengua_indigena: campo(s, ['lengua_indigena','lengua_indígena']),
-      comunidad_indigena: campo(s, ['comunidad_indigena','comunidad_indígena']),
-      acceso_internet: campo(s, ['acceso_internet','internet','Internet']),
-      tiene_beca: campo(s, ['tiene_beca','tiene_beca_pilares']),
-      estatus_registro: campo(s, ['estatus_registro','estatus','Estatus'])
-    };
-  }
   if(DATA.socio) DATA.socio.forEach(s=>{ const folio = campo(s, ['folio','Folio']); if(folio) socioMap[folio.trim().toLowerCase()] = normalizarSocio(s); });
 
-  const mapaP1 = p1.length ? mapaPreguntas(p1[0]) : {};
-  const mapaP2 = p2.length ? mapaPreguntas(p2[0]) : {};
+  const mapaP1 = mapaPreguntas(DATA.p1Fields);
+  const mapaP2 = mapaPreguntas(DATA.p2Fields);
   const p2ByUser = {}; p2.forEach(f=>p2ByUser[usuarioDe(f)]=f);
 
   const personas = p1.map(f1=>{
@@ -1119,9 +1144,10 @@ function poblarFiltrosAlcaldia(){
   const sel = document.getElementById('filtroAlcaldia');
   const selT = document.getElementById('filtroTurno');
   const selS = document.getElementById('filtroSede');
-  const alcaldias = [...new Set(DATA.socio.map(s=>s.alcaldia).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  const turnos = [...new Set(DATA.socio.map(s=>s.turno_simulado).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  const sedes = [...new Set(DATA.socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const socio = socioNormalizado();
+  const alcaldias = [...new Set(socio.map(s=>s.alcaldia).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const turnos = [...new Set(socio.map(s=>s.turno_simulado).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const sedes = [...new Set(socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   sel.innerHTML = '<option value="">Todas las alcaldías</option>' + alcaldias.map(a=>`<option>${a}</option>`).join('');
   selT.innerHTML = '<option value="">Todos los turnos</option>' + turnos.map(t=>`<option>${t}</option>`).join('');
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
@@ -1131,7 +1157,7 @@ function actualizarSedesPorAlcaldia(){
   const alcaldia = document.getElementById('filtroAlcaldia').value;
   const selS = document.getElementById('filtroSede');
   const actual = selS.value;
-  const sedes = [...new Set(DATA.socio.filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const sedes = [...new Set(socioNormalizado().filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
   selS.value = sedes.includes(actual) ? actual : '';
 }
@@ -1307,8 +1333,9 @@ function poblarFiltrosIndividual(){
   if(!DATA.socio) return;
   const selA = document.getElementById('filtroAlcaldiaInd');
   const selS = document.getElementById('filtroSedeInd');
-  const alcaldias = [...new Set(DATA.socio.map(s=>s.alcaldia).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
-  const sedes = [...new Set(DATA.socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const socio = socioNormalizado();
+  const alcaldias = [...new Set(socio.map(s=>s.alcaldia).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const sedes = [...new Set(socio.map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   selA.innerHTML = '<option value="">Todas las alcaldías</option>' + alcaldias.map(a=>`<option>${a}</option>`).join('');
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
 }
@@ -1317,7 +1344,7 @@ function actualizarSedesPorAlcaldiaInd(){
   const alcaldia = document.getElementById('filtroAlcaldiaInd').value;
   const selS = document.getElementById('filtroSedeInd');
   const actual = selS.value;
-  const sedes = [...new Set(DATA.socio.filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+  const sedes = [...new Set(socioNormalizado().filter(s=>!alcaldia || s.alcaldia===alcaldia).map(s=>s.sede_asignada_simulada).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
   selS.innerHTML = '<option value="">Todas las sedes</option>' + sedes.map(s=>`<option>${s}</option>`).join('');
   selS.value = sedes.includes(actual) ? actual : '';
 }
