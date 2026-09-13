@@ -569,7 +569,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
   </div>
 </div>
 
-<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-13 17:15 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
+<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-13 17:33 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
 
 <script>
 /* ============================================================
@@ -599,6 +599,15 @@ function cambiarVista(id){
   document.querySelectorAll('.nav-item').forEach(t=>t.classList.toggle('activo', t.dataset.view===id));
   document.querySelectorAll('.view').forEach(p=>p.classList.toggle('activo', p.id==='view-'+id));
   document.getElementById('sidebar').classList.remove('abierta');
+  /* las gráficas que se crean mientras su pestaña está oculta miden mal el espacio disponible
+     (limitación conocida de Chart.js) — al abrir la pestaña, se vuelven a dibujar ya visibles */
+  if(RESULTADOS){
+    if(id==='resumen') renderResumen();
+    else if(id==='asistencia') renderAsistencia();
+    else if(id==='bloques') renderBloques();
+    else if(id==='socio') renderSocio();
+    else if(id==='individual') renderListaIndividual();
+  }
 }
 function abrirConfig(){ document.getElementById('configOverlay').classList.add('abierto'); }
 function cerrarConfig(){ document.getElementById('configOverlay').classList.remove('abierto'); }
