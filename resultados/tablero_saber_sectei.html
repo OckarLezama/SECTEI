@@ -203,7 +203,9 @@ table.bloques-tbl input.nombre{width:100%;}
 /* ---------- filtros / mapa calor ---------- */
 .filtro-conteo{font-size:12px;color:var(--tinta-suave);align-self:center;}
 .mini-titulo{font-size:11px;font-weight:700;color:var(--tinta-suave);margin-bottom:4px;}
-.mapa-calor{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;}
+.mapa-calor{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;}
+@media(max-width:900px){.mapa-calor{grid-template-columns:repeat(4,minmax(0,1fr));}}
+@media(max-width:560px){.mapa-calor{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .celda-calor{border-radius:9px;padding:11px 12px;color:#fff;min-height:64px;display:flex;flex-direction:column;justify-content:space-between;
   border:none;font-family:inherit;text-align:left;cursor:pointer;transition:transform .12s ease, box-shadow .12s ease;}
 .celda-calor:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.18);}
@@ -372,7 +374,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
         <div class="grid2">
           <div class="card">
             <h3>Promedio general de la aplicación</h3>
-            <div class="card-sub">Calificación en escala de 0 a 10, como se acostumbra en México</div>
+            <div class="card-sub">Calificación en escala de 0 a 10</div>
             <div class="promedio-grande" id="promedioGeneral">—</div>
             <div class="promedio-detalle" id="promedioDetalle"></div>
           </div>
@@ -567,7 +569,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
   </div>
 </div>
 
-<footer>Tablero de prueba — datos sintéticos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-13 17:05 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
+<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-13 17:15 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
 
 <script>
 /* ============================================================
