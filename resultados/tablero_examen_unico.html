@@ -772,7 +772,24 @@ function procesarDatos(){
   const p1 = deduplicarPorUsuario(DATA.p1.filter(f=>!filaEsPromedio(f) && usuarioDe(f)));
   const p2 = deduplicarPorUsuario(DATA.p2.filter(f=>!filaEsPromedio(f) && usuarioDe(f)));
   const socioMap = {};
-  if(DATA.socio) DATA.socio.forEach(s=>{ if(s.folio) socioMap[s.folio.trim().toLowerCase()] = s; });
+  /* normaliza nombres de columna del sociodemográfico: acepta variantes con/sin acento y nombres reales vs. los de la prueba */
+  function normalizarSocio(s){
+    return {
+      folio: campo(s, ['folio','Folio']),
+      genero: campo(s, ['genero','género','Genero','Género']),
+      rango_edad: campo(s, ['rango_edad','edad_rango','Rango de edad']),
+      alcaldia: campo(s, ['alcaldia','alcaldía','Alcaldia','Alcaldía']),
+      turno_simulado: campo(s, ['turno_simulado','turno','Turno']),
+      sede_asignada_simulada: campo(s, ['sede_asignada_simulada','sede_asignada','sede','Sede']),
+      discapacidad: campo(s, ['discapacidad','Discapacidad']),
+      lengua_indigena: campo(s, ['lengua_indigena','lengua_indígena']),
+      comunidad_indigena: campo(s, ['comunidad_indigena','comunidad_indígena']),
+      acceso_internet: campo(s, ['acceso_internet','internet','Internet']),
+      tiene_beca: campo(s, ['tiene_beca','tiene_beca_pilares']),
+      estatus_registro: campo(s, ['estatus_registro','estatus','Estatus'])
+    };
+  }
+  if(DATA.socio) DATA.socio.forEach(s=>{ const folio = campo(s, ['folio','Folio']); if(folio) socioMap[folio.trim().toLowerCase()] = normalizarSocio(s); });
 
   const mapaP1 = p1.length ? mapaPreguntas(p1[0]) : {};
   const mapaP2 = p2.length ? mapaPreguntas(p2[0]) : {};
