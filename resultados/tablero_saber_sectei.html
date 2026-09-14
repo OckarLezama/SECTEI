@@ -603,7 +603,7 @@ https://raw.githubusercontent.com/OckarLezama/SECTEI/main/resultados/parte2_p5.c
   </div>
 </div>
 
-<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-14 17:35 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
+<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-14 17:52 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
 
 <script>
 /* ============================================================
@@ -896,7 +896,6 @@ function cargarTodo(){
   document.getElementById('p1').className = 'punto ok';
   document.getElementById('mP1').textContent = `Incluido en este archivo (${resEmbebido.data.length} filas, ${resEmbebido.meta.fields.length} columnas) — no requiere descarga.`;
   respuestasCarga++;
-  intentarProcesar();
 
   /* Parte 2: por ahora también embebida (datos anteriores fusionados), mientras llega la base
      depurada de Parte 2 mañana — cuando llegue, se reemplaza este bloque de la misma forma. */
@@ -906,7 +905,9 @@ function cargarTodo(){
   document.getElementById('p2').className = 'punto ok';
   document.getElementById('mP2').textContent = `Incluido en este archivo (${resEmbebido2.data.length} filas, ${resEmbebido2.meta.fields.length} columnas) — no requiere descarga.`;
   respuestasCarga++;
-  intentarProcesar();
+  /* nota: a propósito NO se llama intentarProcesar() todavía aquí — se espera a que el
+     sociodemográfico también termine (éxito o error) para procesar y dibujar todo una sola vez,
+     en vez de dos veces seguidas (lo cual podía dejar gráficas dibujadas una encima de la otra) */
 
   cargarCSV(document.getElementById('urlSocio').value, document.getElementById('fileSocio'), (d, fields)=>{
     DATA.socio = d; document.getElementById('p3').className = 'punto ' + (d?'ok':'falta'); respuestasCarga++; intentarProcesar();
@@ -1137,7 +1138,16 @@ function procesarDatos(){
   renderListaIndividual();
 }
 
-function destruirChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
+function destruirChart(id){
+  if(charts[id]){
+    const lienzo = charts[id].canvas;
+    charts[id].destroy();
+    delete charts[id];
+    /* se limpia también el dibujo físico del canvas por si el navegador deja algún rastro
+       del render anterior antes de que Chart.js dibuje el nuevo encima */
+    if(lienzo){ const ctx = lienzo.getContext('2d'); if(ctx) ctx.clearRect(0,0,lienzo.width,lienzo.height); }
+  }
+}
 
 /* ============================================================
    RESUMEN
@@ -1241,8 +1251,9 @@ function renderResumen(){
     });
     charts.avanceHora = new Chart(document.getElementById('chartAvanceHora'), {
       type:'line',
-      data:{ labels:etiquetasHora, datasets:[{ label:'Terminaron Parte 1 (acumulado)', data:acumulado, borderColor:'#778E88', backgroundColor:'rgba(119,142,136,.15)', fill:true, tension:.25, pointRadius:0, borderWidth:2 }]},
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      data:{ labels:etiquetasHora, datasets:[{ label:'Terminaron Parte 1 (acumulado)', data:acumulado, borderColor:'#778E88', backgroundColor:'transparent', fill:false, tension:0, pointRadius:0, pointHoverRadius:0, borderWidth:2 }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, valoresEnBarras:false, tooltip:{enabled:false}},
+        elements:{point:{radius:0}},
         scales:{ x:{ticks:{maxTicksLimit:8,font:{size:10}}, grid:{display:false}}, y:{grid:{color:'#efe9d8'}, title:{display:true,text:'aspirantes',font:{size:11}}} } }
     });
   }
