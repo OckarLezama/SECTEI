@@ -197,8 +197,8 @@ table.bloques-tbl input.nombre{width:100%;}
 .sede-fila:last-child{border-bottom:none;}
 .sede-fila .nombre-sede{max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .sede-fila .valor-sede{font-weight:700;}
-.sede-fila.buena .valor-sede{color:var(--verde-d);}
-.sede-fila.mala .valor-sede{color:var(--rojo-d);}
+.sede-fila.cien{color:var(--verde-d);}
+.sede-fila.no-cien{color:var(--rojo-d);}
 
 /* ---------- filtros / mapa calor ---------- */
 .filtro-conteo{font-size:12px;color:var(--tinta-suave);align-self:center;}
@@ -503,11 +503,13 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
             <h3>Detalle por alcaldía</h3>
             <div class="card-sub">"% acredita ≥3" = de los aspirantes de esa alcaldía, cuántos acreditan 3 bloques o más. Las columnas por bloque muestran cuántos acreditan cada uno. Calificación en escala 0–10.</div>
             <div class="tabla-scroll"><table class="datos" id="tablaAlcaldia"></table></div>
+            <button class="btn" style="margin-top:12px;" onclick="descargarCSV(tablaAComoCSV('tablaAlcaldia'), 'detalle_por_alcaldia.csv')">⬇ Descargar esta tabla (CSV)</button>
           </div>
           <div class="card">
             <h3>Resultados por sede</h3>
             <div class="card-sub">Sede asignada (simulada para esta prueba). Las columnas por bloque muestran cuántos acreditan cada uno</div>
             <div class="tabla-scroll"><table class="datos" id="tablaSede"></table></div>
+            <button class="btn" style="margin-top:12px;" onclick="descargarCSV(tablaAComoCSV('tablaSede'), 'resultados_por_sede.csv')">⬇ Descargar esta tabla (CSV)</button>
           </div>
         </div>
       </div>
@@ -524,6 +526,7 @@ footer{text-align:center;font-size:11px;color:var(--tinta-tenue);padding:30px 0 
             <span id="filtroConteoInd" class="filtro-conteo"></span>
           </div>
           <div class="tabla-scroll"><table class="datos" id="tablaListaIndividual"></table></div>
+          <button class="btn" style="margin-top:12px;" onclick="descargarCSV(tablaAComoCSV('tablaListaIndividual'), 'listado_aspirantes.csv')">⬇ Descargar este listado (CSV)</button>
         </div>
         <div class="card">
           <h3>Buscar aspirante por folio</h3>
@@ -600,7 +603,7 @@ https://raw.githubusercontent.com/OckarLezama/SECTEI/main/resultados/parte2_p5.c
   </div>
 </div>
 
-<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-14 16:04 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
+<footer>Tablero SECTEI — datos de validación. Sujeto a modificaciones. Seguimiento interno SABER-SECTEI.<br>Versión del archivo: 2026-09-14 17:35 UTC — si esta fecha no coincide con la más reciente que te compartieron, tu navegador está mostrando una copia en caché.</footer>
 
 <script>
 /* ============================================================
@@ -627,6 +630,74 @@ let BLOQUES = {
 let DATA = { p1:null, p2:null, socio:null };
 let RESULTADOS = null;
 let charts = {};
+/* convierte una tabla ya renderizada en pantalla (respetando los filtros activos) a texto CSV */
+function tablaAComoCSV(tablaId){
+  const tabla = document.getElementById(tablaId);
+  if(!tabla) return '';
+  const filas = Array.from(tabla.querySelectorAll('tr'));
+  return filas.map(fila=>{
+    const celdas = Array.from(fila.querySelectorAll('th,td'));
+    return celdas.map(c=>{
+      let texto = c.textContent.replace(/\s+/g,' ').trim();
+      if(texto.includes(',') || texto.includes('"') || texto.includes('\n')) texto = '"'+texto.replace(/"/g,'""')+'"';
+      return texto;
+    }).join(',');
+  }).join('\r\n');
+}
+function descargarCSV(contenidoCSV, nombreArchivo){
+  if(!contenidoCSV){ return; }
+  const blob = new Blob(['\ufeff'+contenidoCSV], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombreArchivo;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+/* helper: formatea enteros con coma de miles ("11231" -> "11,231") */
+function formatoNum(n){
+  if(n===null || n===undefined || isNaN(n)) return '—';
+  return Math.round(n).toLocaleString('es-MX');
+}
+/* plugin ligero (sin librería externa) que dibuja el valor de cada barra sobre la propia gráfica.
+   Se activa por gráfica agregando options.plugins.valoresEnBarras = {sufijo:'%'} (o {} para número plano). */
+Chart.register({
+  id: 'valoresEnBarras',
+  afterDatasetsDraw(chart){
+    const cfg = chart.options.plugins && chart.options.plugins.valoresEnBarras;
+    if(!cfg) return;
+    const {ctx} = chart;
+    ctx.save();
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillStyle = cfg.color || '#3A362F';
+    ctx.textBaseline = 'middle';
+    chart.data.datasets.forEach((ds, dsIndex)=>{
+      const meta = chart.getDatasetMeta(dsIndex);
+      if(meta.hidden) return;
+      meta.data.forEach((elemento, i)=>{
+        const valor = ds.data[i];
+        /* blindaje: si el valor no es un número real (null, texto, NaN, un objeto {x,y} de otro tipo
+           de gráfica), simplemente no se dibuja la etiqueta en vez de tronar toda la página */
+        const esNumero = typeof valor === 'number' && isFinite(valor);
+        if(!esNumero) return;
+        let texto;
+        try{
+          texto = (cfg.formatear ? cfg.formatear(valor) : formatoNum(valor)) + (cfg.sufijo||'');
+        }catch(e){
+          texto = formatoNum(valor);
+        }
+        const pos = elemento.tooltipPosition ? elemento.tooltipPosition() : {x:elemento.x, y:elemento.y};
+        if(chart.options.indexAxis==='y'){
+          ctx.textAlign = 'left';
+          ctx.fillText(texto, pos.x+4, pos.y);
+        } else {
+          ctx.textAlign = 'center';
+          ctx.fillText(texto, pos.x, pos.y-8);
+        }
+      });
+    });
+    ctx.restore();
+  }
+});
 
 /* ============================================================
    UI: navegacion / config modal
@@ -1103,12 +1174,12 @@ function renderResumen(){
   });
 
   document.getElementById('kpiResumen').innerHTML = `
-    <div class="kpi"><div class="num num-serif">${total}</div><div class="lbl">Aspirantes registrados</div></div>
-    <div class="kpi acento-verde"><div class="num num-serif">${presentados}</div><div class="lbl">Presentaron alguna parte</div></div>
-    <div class="kpi acento-verde"><div class="num num-serif">${term1}</div><div class="lbl">Terminaron Parte 1</div></div>
-    <div class="kpi acento-verde"><div class="num num-serif">${term2}</div><div class="lbl">Terminaron Parte 2</div></div>
-    <div class="kpi acento-arena"><div class="num num-serif">${acreditan3}</div><div class="lbl">Acreditan 3 bloques o más</div></div>
-    <div class="kpi acento-verde"><div class="num num-serif">${acreditanTodos}</div><div class="lbl">Acreditan todos los bloques</div></div>
+    <div class="kpi"><div class="num num-serif">${formatoNum(total)}</div><div class="lbl">Aspirantes presentados</div></div>
+    <div class="kpi acento-verde"><div class="num num-serif">${formatoNum(presentados)}</div><div class="lbl">Presentaron alguna parte</div></div>
+    <div class="kpi acento-verde"><div class="num num-serif">${formatoNum(term1)}</div><div class="lbl">Terminaron Parte 1</div></div>
+    <div class="kpi acento-verde"><div class="num num-serif">${formatoNum(term2)}</div><div class="lbl">Terminaron Parte 2</div></div>
+    <div class="kpi acento-arena"><div class="num num-serif">${formatoNum(acreditan3)}</div><div class="lbl">Acreditan 3 bloques o más</div></div>
+    <div class="kpi acento-verde"><div class="num num-serif">${formatoNum(acreditanTodos)}</div><div class="lbl">Acreditan todos los bloques</div></div>
   `;
 
   /* % de acreditación por bloque, con nombre real de cada bloque */
@@ -1144,10 +1215,10 @@ function renderResumen(){
   document.getElementById('avanceEnCurso').style.width = pctCurso+'%';
   document.getElementById('avancePendientes').style.width = pctPend+'%';
   document.getElementById('avanceLeyenda').innerHTML = `
-    <span><span class="punto-leyenda" style="background:var(--verde)"></span><strong>${terminaronAmbas}</strong> terminaron ambas partes (${pctTerm}%)</span>
-    <span><span class="punto-leyenda" style="background:var(--arena)"></span><strong>${enCurso}</strong> en curso ahora mismo</span>
-    <span><span class="punto-leyenda" style="background:#E7E2CE"></span><strong>${pendientes}</strong> aún no inician (${pctPend}%)</span>
-    <span>de <strong>${totalUniverso}</strong> aspirantes ${DATA.socio? 'registrados':'en el archivo de calificaciones'}</span>
+    <span><span class="punto-leyenda" style="background:var(--verde)"></span><strong>${formatoNum(terminaronAmbas)}</strong> terminaron ambas partes (${pctTerm}%)</span>
+    <span><span class="punto-leyenda" style="background:var(--arena)"></span><strong>${formatoNum(enCurso)}</strong> en curso ahora mismo</span>
+    <span><span class="punto-leyenda" style="background:#E7E2CE"></span><strong>${formatoNum(pendientes)}</strong> aún no inician (${pctPend}%)</span>
+    <span>de <strong>${formatoNum(totalUniverso)}</strong> aspirantes ${DATA.socio? 'registrados':'en el archivo de calificaciones'}</span>
   `;
 
   /* avance por hora: acumulado de quienes terminan la Parte 1, usando las horas reales de Finalizado */
@@ -1157,11 +1228,15 @@ function renderResumen(){
     const etiquetasHora = [];
     const acumulado = [];
     let contador = 0;
+    /* si los datos abarcan más de un día, se agrega la fecha a la etiqueta — si no, la hora sola
+       puede "saltar hacia atrás" visualmente al pasar de un día al siguiente (ej. de 16:59 a 10:14) */
+    const abarcaVariosDias = conFin.length>1 && conFin[0].toDateString() !== conFin[conFin.length-1].toDateString();
     conFin.forEach((f,i)=>{
       contador++;
       const hh = String(f.getHours()).padStart(2,'0');
       const mm = String(f.getMinutes()).padStart(2,'0');
-      etiquetasHora.push(`${hh}:${mm}`);
+      const etiqueta = abarcaVariosDias ? `${f.getDate()} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][f.getMonth()]} ${hh}:${mm}` : `${hh}:${mm}`;
+      etiquetasHora.push(etiqueta);
       acumulado.push(contador);
     });
     charts.avanceHora = new Chart(document.getElementById('chartAvanceHora'), {
@@ -1198,17 +1273,23 @@ function renderResumen(){
     const filasSede = Object.keys(sedes).map(s=>{
       const grupo = sedes[s];
       const pct = Math.round(100*grupo.filter(p=>p.acreditados>=3).length/grupo.length);
-      return {sede:s, n:grupo.length, pct};
+      const alcaldia = grupo[0].socio.alcaldia || '—';
+      return {sede:s, alcaldia, n:grupo.length, pct};
     }).filter(s=>s.n>=3).sort((a,b)=>b.pct-a.pct);
     if(!filasSede.length){
       document.getElementById('sedesDestacadas').innerHTML = '<p class="nota">Ninguna sede alcanza 3 aspirantes en esta muestra de prueba — con la base completa esta sección sí tendrá datos.</p>';
     } else {
       const top = filasSede.slice(0,3);
       const bottom = filasSede.slice(-3).reverse();
+      /* verde si la sede acredita al 100%, rojo en cualquier otro porcentaje; la alcaldía siempre en negrita */
+      const filaHTML = (s)=>{
+        const clase = s.pct===100 ? 'cien' : 'no-cien';
+        return `<div class="sede-fila ${clase}"><span class="nombre-sede"><strong>${s.alcaldia}</strong> · ${s.sede}</span><span class="valor-sede">${s.pct}%</span></div>`;
+      };
       document.getElementById('sedesDestacadas').innerHTML =
-        top.map(s=>`<div class="sede-fila buena"><span class="nombre-sede">${s.sede}</span><span class="valor-sede">${s.pct}%</span></div>`).join('') +
+        top.map(filaHTML).join('') +
         (filasSede.length>3 ? '<div style="height:10px;"></div>' : '') +
-        bottom.map(s=>`<div class="sede-fila mala"><span class="nombre-sede">${s.sede}</span><span class="valor-sede">${s.pct}%</span></div>`).join('');
+        bottom.map(filaHTML).join('');
     }
   } else {
     document.getElementById('sedesDestacadas').innerHTML = '<p class="nota">Carga el CSV sociodemográfico para ver resultados por sede.</p>';
@@ -1235,12 +1316,15 @@ function renderAsistencia(){
   const personas = RESULTADOS.personas;
   const term1 = personas.filter(p=>p.estado1==='Terminado').length;
   const term2 = personas.filter(p=>p.estado2==='Terminado').length;
-  const noPres = personas.filter(p=>p.estado1!=='Terminado' && p.estado2!=='Terminado').length;
+  /* "no se presentaron" = universo completo del sociodemográfico menos quienes sí aparecen presentados
+     en las calificaciones — es decir, gente registrada que nunca llegó a abrir el examen */
+  const totalUniversoSocio = DATA.socio ? DATA.socio.length : personas.length;
+  const noPres = Math.max(0, totalUniversoSocio - personas.length);
 
   document.getElementById('kpiAsistencia').innerHTML = `
-    <div class="kpi acento-verde"><div class="num num-serif">${term1}</div><div class="lbl">Terminaron Parte 1</div></div>
-    <div class="kpi acento-verde"><div class="num num-serif">${term2}</div><div class="lbl">Terminaron Parte 2</div></div>
-    <div class="kpi acento-rojo"><div class="num num-serif">${noPres}</div><div class="lbl">No se presentaron a ninguna parte</div></div>
+    <div class="kpi acento-verde"><div class="num num-serif">${formatoNum(term1)}</div><div class="lbl">Terminaron Parte 1</div></div>
+    <div class="kpi acento-verde"><div class="num num-serif">${formatoNum(term2)}</div><div class="lbl">Terminaron Parte 2</div></div>
+    <div class="kpi acento-rojo"><div class="num num-serif">${formatoNum(noPres)}</div><div class="lbl">No se presentaron a ninguna sede</div></div>
   `;
 
   const turnos = ["Matutino","Único","Vespertino"];
@@ -1257,7 +1341,7 @@ function renderAsistencia(){
         {label:'Terminaron Parte 1', data:asistPorTurno.map(a=>a.term1), backgroundColor:'#778E88', borderRadius:5, maxBarThickness:34},
         {label:'Terminaron Parte 2', data:asistPorTurno.map(a=>a.term2), backgroundColor:'#B66666', borderRadius:5, maxBarThickness:34}
       ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}}, scales:{x:{grid:{color:'#efe9d8'}}, y:{grid:{color:'#efe9d8'}}} }
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}, valoresEnBarras:{}}, scales:{x:{grid:{color:'#efe9d8'}}, y:{grid:{color:'#efe9d8'}}} }
   });
 
   const rangos = ["Menos de 1 hora","Entre 1 y 2 horas","Más de 2 horas"];
@@ -1271,7 +1355,7 @@ function renderAsistencia(){
         {label:'Parte 1', data:cont1, backgroundColor:'#B66666', borderRadius:5, maxBarThickness:34},
         {label:'Parte 2', data:cont2, backgroundColor:'#778E88', borderRadius:5, maxBarThickness:34}
       ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}}, scales:{x:{grid:{color:'#efe9d8'}}, y:{grid:{color:'#efe9d8'}}} }
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}, valoresEnBarras:{}}, scales:{x:{grid:{color:'#efe9d8'}}, y:{grid:{color:'#efe9d8'}}} }
   });
 
   /* dispersion: duracion (minutos) vs calificacion (0-10), color por acredita */
@@ -1300,8 +1384,8 @@ function renderBloques(){
   const personas = RESULTADOS.personas;
   document.getElementById('kpiBloques').innerHTML = `
     <div class="kpi"><div class="num num-serif">${BLOQUES.parte1.length + BLOQUES.parte2.length}</div><div class="lbl">Bloques configurados</div></div>
-    <div class="kpi acento-arena"><div class="num num-serif">${personas.filter(p=>p.acreditados>=3).length}</div><div class="lbl">Acreditan ≥ 3 bloques</div></div>
-    <div class="kpi acento-verde"><div class="num num-serif">${personas.filter(p=>p.totalBloques>0 && p.acreditados===p.totalBloques).length}</div><div class="lbl">Acreditan todos</div></div>
+    <div class="kpi acento-arena"><div class="num num-serif">${formatoNum(personas.filter(p=>p.acreditados>=3).length)}</div><div class="lbl">Acreditan ≥ 3 bloques</div></div>
+    <div class="kpi acento-verde"><div class="num num-serif">${formatoNum(personas.filter(p=>p.totalBloques>0 && p.acreditados===p.totalBloques).length)}</div><div class="lbl">Acreditan todos</div></div>
   `;
 
   const filas = [];
@@ -1343,7 +1427,7 @@ function renderBloques(){
   charts.promedioBloque = new Chart(document.getElementById('chartPromedioBloque'), {
     type:'bar',
     data:{ labels:filas.map(b=>b.nombre), datasets:[{ label:'Aciertos promedio', data:filas.map(b=> b.arr.length ? (b.arr.reduce((s,x)=>s+x.correctas,0)/b.arr.length) : 0), backgroundColor:'#B66666', borderRadius:5, maxBarThickness:24 }]},
-    options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{display:false}},
+    options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{display:false}, valoresEnBarras:{formatear:v=>v.toFixed(1)}},
       scales:{ x:{grid:{color:'#efe9d8'}}, y:{grid:{display:false}, ticks:{font:{size:10.5}}} } }
   });
 
@@ -1360,7 +1444,7 @@ function renderBloques(){
         {label:'Acredita al menos un bloque', data:[acreditaAlgoP1, acreditaAlgoP2], backgroundColor:'#778E88', borderRadius:5, maxBarThickness:40},
         {label:'Acredita todos los bloques de la parte', data:[acreditaTodoP1, acreditaTodoP2], backgroundColor:'#BDB58D', borderRadius:5, maxBarThickness:40}
       ]},
-    options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},
+    options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}, valoresEnBarras:{}},
       scales:{ x:{grid:{color:'#efe9d8'}}, y:{grid:{display:false}} } }
   });
 
@@ -1435,7 +1519,7 @@ function renderSocio(){
     conDatosEl.style.display='none';
     return;
   }
-  conteoEl.textContent = `${personas.length} de ${todasConSocio.length} aspirantes con dato sociodemográfico coinciden con este filtro`;
+  conteoEl.textContent = `${formatoNum(personas.length)} de ${formatoNum(todasConSocio.length)} aspirantes con dato sociodemográfico coinciden con este filtro`;
 
   if(!personas.length){
     sinDatosEl.style.display='block';
@@ -1477,7 +1561,7 @@ function renderSocio(){
         {label:'No acredita', data:datosAlcaldia.map(d=>100-d.pct), backgroundColor:'#B66666', borderRadius:3, maxBarThickness:22}
       ]},
     options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y',
-      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},
+      plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}, valoresEnBarras:{sufijo:'%'}},
       scales:{ x:{stacked:true, max:100, ticks:{callback:v=>v+'%'}, grid:{color:'#efe9d8'}}, y:{stacked:true, grid:{display:false}, ticks:{autoSkip:false,font:{size:11}}} } }
   });
 
@@ -1497,7 +1581,7 @@ function renderSocio(){
   charts.edad = new Chart(document.getElementById('chartEdad'), {
     type:'bar',
     data:{ labels:edadesOrdenadas, datasets:[{data:edadesOrdenadas.map(k=>edades[k]), backgroundColor:'#BDB58D', borderRadius:5, maxBarThickness:26}]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}}, y:{grid:{color:'#efe9d8'}}} }
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, valoresEnBarras:{}}, scales:{x:{grid:{display:false}}, y:{grid:{color:'#efe9d8'}}} }
   });
 
   /* acreditacion desagregada por sexo */
@@ -1510,7 +1594,7 @@ function renderSocio(){
         {label:'Acredita ≥3 bloques', data:gruposSexo.map(g=>personas.filter(p=>(p.socio.genero||'Sin dato')===g && p.acreditados>=3).length), backgroundColor:'#778E88', borderRadius:5, maxBarThickness:36},
         {label:'No acredita', data:gruposSexo.map(g=>personas.filter(p=>(p.socio.genero||'Sin dato')===g && p.acreditados<3).length), backgroundColor:'#B66666', borderRadius:5, maxBarThickness:36}
       ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}, valoresEnBarras:{}},
       scales:{ x:{stacked:true, grid:{display:false}}, y:{stacked:true, grid:{color:'#efe9d8'}} } }
   });
 
@@ -1523,7 +1607,7 @@ function renderSocio(){
         {label:'Acredita ≥3 bloques', data:edadesOrdenadas.map(e=>personas.filter(p=>(p.socio.rango_edad||'Sin dato')===e && p.acreditados>=3).length), backgroundColor:'#778E88', borderRadius:5, maxBarThickness:30},
         {label:'No acredita', data:edadesOrdenadas.map(e=>personas.filter(p=>(p.socio.rango_edad||'Sin dato')===e && p.acreditados<3).length), backgroundColor:'#B66666', borderRadius:5, maxBarThickness:30}
       ]},
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}, valoresEnBarras:{}},
       scales:{ x:{stacked:true, grid:{display:false}}, y:{stacked:true, grid:{color:'#efe9d8'}} } }
   });
 
@@ -1551,8 +1635,8 @@ function renderSocio(){
   let headA = `<tr><th>Alcaldía</th><th>Aspirantes</th><th>Terminaron Parte 1</th><th>Acreditan ≥3 bloques</th><th>% que acredita ≥3</th><th>Calif. promedio (todos, /10)</th><th>Calif. promedio (solo quienes acreditan ≥ 3, /10)</th>${colsBloques}</tr>`;
   let cuerpoA = datosAlcaldia.map(d=>{
     const grupo = personas.filter(p=>p.socio.alcaldia===d.alcaldia);
-    const porBloque = contarPorBloque(grupo).map(n=>`<td>${n}</td>`).join('');
-    return `<tr><td>${d.alcaldia}</td><td>${d.n}</td><td>${d.term}</td><td>${d.acred}</td><td title="${d.acred} de ${d.n}">${d.pct}%</td><td>${d.promGrupo10!==null? d.promGrupo10.toFixed(1) : '—'}</td><td>${d.promAcred10!==null? d.promAcred10.toFixed(1) : '—'}</td>${porBloque}</tr>`;
+    const porBloque = contarPorBloque(grupo).map(n=>`<td>${formatoNum(n)}</td>`).join('');
+    return `<tr><td>${d.alcaldia}</td><td>${formatoNum(d.n)}</td><td>${formatoNum(d.term)}</td><td>${formatoNum(d.acred)}</td><td title="${formatoNum(d.acred)} de ${formatoNum(d.n)}">${d.pct}%</td><td>${d.promGrupo10!==null? d.promGrupo10.toFixed(1) : '—'}</td><td>${d.promAcred10!==null? d.promAcred10.toFixed(1) : '—'}</td>${porBloque}</tr>`;
   }).join('');
   document.getElementById('tablaAlcaldia').innerHTML = headA + cuerpoA;
 
@@ -1561,8 +1645,8 @@ function renderSocio(){
   let cuerpoS = sedes.map(s=>{
     const grupo = personas.filter(p=>p.socio.sede_asignada_simulada===s);
     const acred = grupo.filter(p=>p.acreditados>=3).length;
-    const porBloque = contarPorBloque(grupo).map(n=>`<td>${n}</td>`).join('');
-    return `<tr><td>${s}</td><td>${grupo.length}</td><td>${acred}</td><td title="${acred} de ${grupo.length}">${Math.round(100*acred/grupo.length)}%</td>${porBloque}</tr>`;
+    const porBloque = contarPorBloque(grupo).map(n=>`<td>${formatoNum(n)}</td>`).join('');
+    return `<tr><td>${s}</td><td>${formatoNum(grupo.length)}</td><td>${formatoNum(acred)}</td><td title="${formatoNum(acred)} de ${formatoNum(grupo.length)}">${Math.round(100*acred/grupo.length)}%</td>${porBloque}</tr>`;
   }).join('');
   document.getElementById('tablaSede').innerHTML = sedes.length ? (headS + cuerpoS) : '<tr><td>Sin datos de sede para este filtro.</td></tr>';
 }
@@ -1605,7 +1689,7 @@ function renderListaIndividual(){
   let personas = RESULTADOS.personas;
   if(fA) personas = personas.filter(p=>p.socio && p.socio.alcaldia===fA);
   if(fS) personas = personas.filter(p=>p.socio && p.socio.sede_asignada_simulada===fS);
-  document.getElementById('filtroConteoInd').textContent = `${personas.length} de ${RESULTADOS.personas.length} aspirantes`;
+  document.getElementById('filtroConteoInd').textContent = `${formatoNum(personas.length)} de ${formatoNum(RESULTADOS.personas.length)} aspirantes`;
   let head = '<tr><th>Folio</th><th>Nombre</th><th>Alcaldía</th><th>Sede</th><th>Calificación (0–10)</th><th>Bloques acreditados</th></tr>';
   let cuerpo = personas.map(p=>{
     const calif = p.puntajeMax>0 ? (p.puntajeTotal/p.puntajeMax*10).toFixed(1) : '—';
